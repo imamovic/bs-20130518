@@ -205,28 +205,24 @@
 	function ipLookupFromDatabase($file,$ip)
 	{ 
 		if(file_exists($file)) //check is file path ok
-		{ 
-			 
+		{
+			//because need ip range find by sql statement i add some changes in my code
+			//now I am compare ip and range in long int format (fist convert to in)
+			//beacuse that I add new column in database for save int value of ip range
+			//int presentation is the best for save in database if need do compare 
 			$result=array();
+			$intIp=ip2long($ip);
 			$connect= new SQLite3($file);
-			$data=$connect->query("SELECT * FROM ip_address"); 
+			$data=$connect->query("SELECT * FROM ip_address WHERE (ip_number & (~((1<<(32-mask))-1))) = (".$intIp." & (~((1<<(32-mask))-1)))"); 
 			if($data!=false)
 			{
-				while ($row = $data->fetchArray()) {
-					if(checkIsInRange($ip,$row["ip"],$row["mask"]))
-					{
-						$result[]=$row["ip"]."/".$row["mask"];
-					}
-				}
-				if(count($result)==0)
-					return "No result found!";
-				else
-					return join(PHP_EOL,$result).PHP_EOL; //join result and print 
+				while ($row = $data->fetchArray()) { 
+					$result[]=$row["ip"]."/".$row["mask"];
+				} 
+				if(count($result)>0) 
+					return join(PHP_EOL,$result).PHP_EOL; //join result and print 	
 			}
-			else
-			{
-				return "Database is empty";
-			}
+			return "No result found!";
 			
 		}
 		else
@@ -234,23 +230,7 @@
 			return "File '$file' not found";
 		}
 	}
-	/**
-	* Function convert ip address to binary
-	* @param string  $ip, ip address
-	* @return string
-	*/
-	function addressToBinary($ip)
-	{
-		$ipAddress=explode(".",$ip);
-		$binaryAddress=array();
-		foreach($ipAddress AS $key=>$value)
-		{
-			$b=decbin($value);
-			if(strlen($b)<8) $b=str_repeat('0',8-strlen($b)).$b;
-			$binaryAddress[$key]=$b;
-		}
-		return join('',$binaryAddress);
-	}
+
 	/**
 	* Function chechk is ip in range
 	* @param string  $ip, ip address
@@ -260,15 +240,26 @@
 	*/
 	function checkIsInRange($ip,$range,$mask)
 	{
-		if($mask>0 && $mask<32)
+		
+		//ip comparison will do on int value of ip, and range
+		//i will use function ip2long(x.y.c.k), ip2long return long int value of ip
+		//ip2long(x.y.c.k) => (x << 24) | (y << 16) | (c << 8) | (k)
+		
+		$intIp=ip2long($ip);
+		$intRange=ip2long($range);
+		
+		//mask will convert to longo also
+		$mask = (1 << (32-$mask)) - 1 ;
+		$mask = ~ $mask; // need inverse value
+		
+		if( ($intIp & $mask) == ($intRange & $mask) ) //binary compare, and first $mask bite must be same
 		{
-			
-			$ipB=substr(addressToBinary($ip),0,(int)$mask);
-			$rangeB=substr(addressToBinary($range),0,(int)$mask);
-			if($ipB===$rangeB)
-				return true;
+			return true;
 		}
-		return false;
+		else
+		{
+			return false;
+		}
 	}
 	
 ?>
